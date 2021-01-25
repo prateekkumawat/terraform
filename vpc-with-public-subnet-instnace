@@ -1,0 +1,82 @@
+provider "aws" {
+	secret_key = "xxxxx"
+	access_key = "xxxxx"
+    region = "us-east-1"
+}
+
+resource "aws_vpc" "foo"{
+	cidr_block = "192.168.0.0/16"
+	instance_tenancy = "default"
+	tags = {
+	 Name = "foo"
+	}
+}
+
+resource "aws_subnet" "sub1" {
+	cidr_block = "192.168.1.0/24"
+	map_public_ip_on_launch = "true"
+	vpc_id = aws_vpc.foo.id
+	tags = {
+	Name = "sub1"
+	}
+}
+
+resource "aws_internet_gateway" "igw-foo"{
+	vpc_id = aws_vpc.foo.id
+	tags = { 
+	 Name = "igw-foo"
+	 }
+}
+
+resource "aws_route_table" "public" {
+	vpc_id = aws_vpc.foo.id
+	route {
+    cidr_block = "0.0.0.0/0"
+	gateway_id = aws_internet_gateway.igw-foo.id
+	}
+	tags = {
+    Name = "public"
+  }
+}
+
+resource "aws_route_table_association" "a" {
+  subnet_id      = aws_subnet.sub1.id
+  route_table_id = aws_route_table.public.id
+}
+
+resource "aws_security_group" "high"{
+  name        = "high"
+  description = "Allow http & ssh inbound traffic"
+  vpc_id      = aws_vpc.foo.id
+
+  ingress {
+    description = "TLS from VPC"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "high"
+  }
+}
+resource "aws_instance" "foo-instance" {
+	ami = "ami-0be2609ba883822ec"
+	instance_type = "t2.micro"
+	subnet_id = aws_subnet.sub1.id
+	vpc_security_group_ids = ["${aws_security_group.high.id}"]
+    
+
+	tags = { 
+	 Name = "foo-instance"
+	 }
+
+}
