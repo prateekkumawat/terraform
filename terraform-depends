@@ -1,0 +1,139 @@
+provider "aws" {
+   access_key = "xxxxxx"
+   secret_key = "xxxxx"
+   region = "ap-south-1"
+}
+
+# Create a vpc 
+resource "aws_vpc" "example" {
+   cidr_block = "10.0.0.0/16"
+   instance_tenancy = "default"
+   tags = { 
+     Name = "example"
+   }
+    }
+
+#Create a subnet sub1
+resource "aws_subnet" "sub1" {
+   cidr_block = "10.0.1.0/24"
+   vpc_id = aws_vpc.example.id
+   map_public_ip_on_launch = "true"
+   tags = {
+   Name = "sub1"
+   }
+   }
+
+# Create a subnet sub2 
+resource "aws_subnet" "sub2" {
+   cidr_block = "10.0.2.0/24"
+   vpc_id = aws_vpc.example.id
+   tags = {
+   Name = "sub2"
+   }
+   }
+
+# Create internet gateway 
+resource "aws_internet_gateway" "example-igw" {
+  vpc_id = aws_vpc.example.id
+
+  tags = {
+    Name = "example-igw"
+  }
+}
+
+# Create Route table 
+resource "aws_route_table" "Public" {
+  vpc_id = aws_vpc.example.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.example-igw.id
+  }
+  
+  tags = {
+    Name = "Public"
+  }
+  }
+
+# create route table assosiation 
+resource "aws_route_table_association" "assosiate" {
+  subnet_id      = aws_subnet.sub1.id
+  route_table_id = aws_route_table.Public.id
+}
+
+# Create Security group 
+
+resource "aws_security_group" "sec-grp" {
+  name        = "Allow terra Rules"
+  description = "Allow inbound traffic using Tera"
+  vpc_id      = aws_vpc.example.id
+
+  dynamic ingress {
+     for_each = [ "80", "22", "25", "8080", "8081" ]     
+        content {  
+           from_port   = ingress.value
+           to_port     = ingress.value
+           protocol    = "tcp"
+           cidr_blocks = ["0.0.0.0/0"]
+        }
+  }      
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "sec-grp"
+  }
+}
+
+resource "aws_eip" "my_ip" {
+  instance = aws_instance.exam.id
+  tags = {
+    Name  = "Web Server IP"
+    }
+}
+
+# Create instance in public 
+resource "aws_instance" "exam" { 
+ ami = "ami-08e0ca9924195beba"
+ instance_type = "t2.micro"
+ key_name = "f"
+ subnet_id = aws_subnet.sub1.id 
+ vpc_security_group_ids = ["${aws_security_group.sec-grp.id}"]
+ tags = { 
+ Name = "exam"
+ }
+}
+
+resource "aws_instance" "web" { 
+ ami = "ami-08e0ca9924195beba"
+ instance_type = "t2.micro"
+ key_name = "f"
+ subnet_id = aws_subnet.sub1.id 
+ vpc_security_group_ids = ["${aws_security_group.sec-grp.id}"]
+ tags = { 
+ Name = "web"
+ }
+
+ depends_on = [aws_instance.exam]
+
+}
+
+resource "aws_instance" "db" { 
+ ami = "ami-08e0ca9924195beba"
+ instance_type = "t2.micro"
+ key_name = "f"
+ subnet_id = aws_subnet.sub1.id 
+ vpc_security_group_ids = ["${aws_security_group.sec-grp.id}"]
+ tags = { 
+ Name = "db"
+ }
+  
+   depends_on = [ aws_instance.web, aws_instance.exam ]
+
+}
+
